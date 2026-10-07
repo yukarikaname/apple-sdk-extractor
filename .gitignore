@@ -1,0 +1,5 @@
+# Local extraction output
+apple-sdks/
+out/
+*.zip
+*.tar.gz

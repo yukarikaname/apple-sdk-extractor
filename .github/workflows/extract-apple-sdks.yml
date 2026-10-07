@@ -1,0 +1,206 @@
+name: Extract Apple SDKs
+
+# Manual only. The two dropdowns marked "GENERATED" below are rewritten in place
+# by the "List available Apple SDKs" workflow so the choices reflect the Xcode
+# versions and platforms actually present on the runner. Everything else in this
+# file is hand-written and preserved. To change the workflow logic, edit this
+# file directly; to change the choices, edit the platform/family mapping in
+# .github/scripts/lib.sh.
+
+on:
+  workflow_dispatch:
+    inputs:
+      xcode:
+        description: 'Xcode version to extract SDKs from'
+        required: true
+        default: latest
+        type: choice
+        options:
+          # GENERATED:xcode:start
+          - latest
+          - Xcode_27.2_beta.app
+          - Xcode_27.2.0.app
+          - Xcode_27.2.app
+          - Xcode_27.1_beta.app
+          - Xcode_27.1.0.app
+          - Xcode_27.1.app
+          - Xcode_27.app
+          - Xcode_27.0.0.app
+          - Xcode_27.0.app
+          - Xcode.app
+          # GENERATED:xcode:end
+      platforms:
+        description: 'Which platforms to extract'
+        required: true
+        default: all
+        type: choice
+        options:
+          # GENERATED:platforms:start
+          - all
+          - macos,ios,tvos,watchos
+          - macos,ios,tvos,visionos
+          - macos,ios,watchos,visionos
+          - macos,tvos,watchos,visionos
+          - ios,tvos,watchos,visionos
+          - macos,ios,tvos
+          - macos,ios,watchos
+          - macos,tvos,watchos
+          - ios,tvos,watchos
+          - macos,ios,visionos
+          - macos,tvos,visionos
+          - ios,tvos,visionos
+          - macos,watchos,visionos
+          - ios,watchos,visionos
+          - tvos,watchos,visionos
+          - macos,ios
+          - macos,tvos
+          - ios,tvos
+          - macos,watchos
+          - ios,watchos
+          - tvos,watchos
+          - macos,visionos
+          - ios,visionos
+          - tvos,visionos
+          - watchos,visionos
+          - macos
+          - ios
+          - tvos
+          - watchos
+          - visionos
+          # GENERATED:platforms:end
+      include_simulators:
+        description: 'Include simulator SDKs'
+        required: true
+        default: false
+        type: boolean
+      package:
+        description: 'Archive format'
+        required: true
+        default: zip
+        type: choice
+        options:
+          - zip
+          - tar.gz
+      dereference_symlinks:
+        description: 'Follow symlinks (self-contained, but much larger)'
+        required: true
+        default: false
+        type: boolean
+      upload_artifact:
+        description: 'Upload archives to Actions artifacts (default)'
+        required: true
+        default: true
+        type: boolean
+      upload_to_release:
+        description: 'Also publish archives to a GitHub Release'
+        required: true
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Release tag (blank = apple-sdk-<xcode version>)'
+        required: false
+        default: ''
+        type: string
+
+run-name: >-
+  Extract Apple SDKs (xcode=${{ inputs.xcode }}, platforms=${{ inputs.platforms }},
+  simulators=${{ inputs.include_simulators }})
+
+jobs:
+  extract:
+    # macOS 27 preview image (arm64). Its label is `xcode-27`; there is no
+    # `macos-27` label. Change this line to target another image (for example
+    # `macos-latest`); the dropdowns will be regenerated for it on the next
+    # "List available Apple SDKs" run.
+    runs-on: xcode-27
+    timeout-minutes: 180
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show runner and Xcode info
+        run: |
+          sw_vers
+          echo "Default Xcode: $(xcode-select -p)"
+          xcodebuild -version || true
+
+      - name: Extract and package SDKs
+        id: extract
+        env:
+          XCODE_INPUT: ${{ inputs.xcode }}
+          PLATFORMS: ${{ inputs.platforms }}
+          INCLUDE_SIMULATORS: ${{ inputs.include_simulators }}
+          PACKAGE: ${{ inputs.package }}
+          DEREFERENCE: ${{ inputs.dereference_symlinks }}
+          OUTDIR: ${{ runner.temp }}/apple-sdks
+        run: bash .github/scripts/extract-sdks.sh
+
+      - name: Write job summary
+        if: always()
+        env:
+          OUTDIR: ${{ runner.temp }}/apple-sdks
+          XCODE_NAME: ${{ steps.extract.outputs.xcode_name }}
+          XCODE_VERSION: ${{ steps.extract.outputs.xcode_version }}
+          COUNT: ${{ steps.extract.outputs.count }}
+        run: |
+          {
+            echo "## apple-sdk-extractor"
+            echo
+            echo "- Runner image: \`${{ runner.os }} ${{ runner.arch }}\`"
+            echo "- Xcode: \`${XCODE_NAME:-unknown}\` (version ${XCODE_VERSION:-unknown})"
+            echo "- Archives: ${COUNT:-0}"
+            echo
+            if [ -d "$OUTDIR" ]; then
+              echo "| File | Size |"
+              echo "| --- | --- |"
+              for f in "$OUTDIR"/*.zip "$OUTDIR"/*.tar.gz; do
+                [ -e "$f" ] || continue
+                printf '| `%s` | %s |\n' "$(basename "$f")" "$(du -h "$f" | cut -f1)"
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload workflow artifacts
+        if: ${{ inputs.upload_artifact }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-sdks-xcode${{ steps.extract.outputs.xcode_version }}
+          path: |
+            ${{ runner.temp }}/apple-sdks/*.zip
+            ${{ runner.temp }}/apple-sdks/*.tar.gz
+            ${{ runner.temp }}/apple-sdks/SHA256SUMS.txt
+            ${{ runner.temp }}/apple-sdks/manifest.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.upload_to_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTDIR: ${{ runner.temp }}/apple-sdks
+          XCODE_VERSION: ${{ steps.extract.outputs.xcode_version }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="$REQUESTED_TAG"
+          if [ -z "$TAG" ]; then TAG="apple-sdk-${XCODE_VERSION}"; fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --title "Apple SDKs from Xcode ${XCODE_VERSION}" \
+              --notes "SDK archives extracted from the GitHub-hosted macOS runner (Xcode ${XCODE_VERSION}). See manifest.txt and SHA256SUMS.txt."
+          fi
+
+          for f in "$OUTDIR"/*.zip "$OUTDIR"/*.tar.gz "$OUTDIR"/SHA256SUMS.txt "$OUTDIR"/manifest.txt; do
+            [ -e "$f" ] || continue
+            echo "Uploading $(basename "$f")"
+            gh release upload "$TAG" "$f" --clobber
+          done
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Release: ${REPO_URL}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"

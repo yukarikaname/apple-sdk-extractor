@@ -1,0 +1,82 @@
+name: List available Apple SDKs
+
+# Refreshes the Extract Apple SDKs dropdowns from the published metadata of the
+# target macOS runner image (https://github.com/actions/runner-images), so it
+# does not need a macOS runner and stays cheap. Runs automatically on push and
+# weekly, to pick up new Xcode releases in the image.
+#
+# Committing the refreshed workflow file requires a token with the "workflow"
+# scope, which the default GITHUB_TOKEN does not have. If the optional
+# SDK_EXTRACTOR_TOKEN secret (a PAT with repo + workflow scopes) is set, the
+# change is committed automatically; otherwise it is uploaded as an artifact so
+# you can apply it manually.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/list-apple-sdks.yml'
+      - '.github/workflows/extract-apple-sdks.yml'
+  schedule:
+    # Every Monday at 06:00 UTC.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: list-apple-sdks
+  cancel-in-progress: true
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use a PAT when available so the refreshed workflow file can be
+          # pushed (the default token lacks the "workflow" scope).
+          token: ${{ secrets.SDK_EXTRACTOR_TOKEN || github.token }}
+
+      - name: Regenerate Extract Apple SDKs choices
+        run: bash .github/scripts/render-extract-workflow.sh | tee sdk-inventory.md
+
+      - name: Commit updated choices
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/extract-apple-sdks.yml
+          if git diff --cached --quiet; then
+            echo "Choices are already up to date; nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: refresh Extract Apple SDKs choices from runner image"
+          if git push origin HEAD:main; then
+            echo "Pushed refreshed choices."
+          else
+            echo "::warning title=Extract choices not pushed::The default GITHUB_TOKEN cannot update workflow files. Set the SDK_EXTRACTOR_TOKEN secret (PAT with repo + workflow scopes) to enable automatic updates, or apply the generated workflow from the artifact."
+            {
+              echo ""
+              echo "### Extract menu not updated automatically"
+              echo ""
+              echo "The refreshed \`.github/workflows/extract-apple-sdks.yml\` was uploaded in the **available-apple-sdks** artifact. To enable automatic updates, add a repository secret \`SDK_EXTRACTOR_TOKEN\` containing a PAT with the \`repo\` and \`workflow\` scopes."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish inventory to job summary
+        if: always()
+        run: cat sdk-inventory.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: available-apple-sdks
+          path: |
+            sdk-inventory.md
+            .github/workflows/extract-apple-sdks.yml
+          retention-days: 30

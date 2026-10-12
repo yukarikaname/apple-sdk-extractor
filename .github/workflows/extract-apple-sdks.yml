@@ -18,7 +18,7 @@ on:
         options:
           # GENERATED:xcode:start
           - latest
-          - Xcode_27.2_beta.app
+          - Xcode_27.2_beta_2.app
           - Xcode_27.2.0.app
           - Xcode_27.2.app
           - Xcode_27.1_beta.app

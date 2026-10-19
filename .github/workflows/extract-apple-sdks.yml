@@ -21,7 +21,7 @@ on:
           - Xcode_27.2_beta_2.app
           - Xcode_27.2.0.app
           - Xcode_27.2.app
-          - Xcode_27.1_beta.app
+          - Xcode_27.1_Release_Candidate.app
           - Xcode_27.1.0.app
           - Xcode_27.1.app
           - Xcode_27.app

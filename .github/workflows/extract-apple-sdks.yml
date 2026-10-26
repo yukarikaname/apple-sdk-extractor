@@ -18,16 +18,15 @@ on:
         options:
           # GENERATED:xcode:start
           - latest
-          - Xcode_27.2_beta_2.app
+          - Xcode_27.2_Release_Candidate.app
           - Xcode_27.2.0.app
           - Xcode_27.2.app
-          - Xcode_27.1_Release_Candidate.app
-          - Xcode_27.1.0.app
           - Xcode_27.1.app
+          - Xcode_27.1.0.app
+          - Xcode.app
           - Xcode_27.app
           - Xcode_27.0.0.app
           - Xcode_27.0.app
-          - Xcode.app
           # GENERATED:xcode:end
       platforms:
         description: 'Which platforms to extract'

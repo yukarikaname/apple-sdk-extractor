@@ -18,9 +18,8 @@ on:
         options:
           # GENERATED:xcode:start
           - latest
-          - Xcode_27.2_Release_Candidate.app
-          - Xcode_27.2.0.app
           - Xcode_27.2.app
+          - Xcode_27.2.0.app
           - Xcode_27.1.app
           - Xcode_27.1.0.app
           - Xcode.app
